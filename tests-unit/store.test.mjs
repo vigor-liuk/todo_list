@@ -89,3 +89,47 @@ test('validation checks types, size, dates and command names', () => {
   assert.doesNotThrow(() => serializeTasks([task({ due: '2028-02-29T10:00' })]))
   assert.throws(() => applyCommand([], { type: 'arbitrary' }))
 })
+
+test('start and completion persist across restart, export and import', t => {
+  const { store, dir } = fixture(t)
+  store.command({ type: 'upsert', task: task() })
+  const started = applyCommand(store.tasks, { type: 'start', id: 'one' }, Date.parse('2026-09-21T23:30:00.000Z'))
+  store.commit(started)
+  const reopened = new TaskStore(dir)
+  const again = applyCommand(reopened.tasks, { type: 'start', id: 'one' }, Date.parse('2026-09-22T00:00:00.000Z'))
+  assert.equal(again[0].startedAt, '2026-09-21T23:30:00.000Z')
+  const completed = applyCommand(again, { type: 'complete', id: 'one' }, Date.parse('2026-09-22T00:30:00.000Z'))
+  assert.equal(completed[0].completedAt, '2026-09-22T00:30:00.000Z')
+  assert.equal(completed[0].done, true)
+  assert.deepEqual(applyCommand(completed, { type: 'complete', id: 'one' }), completed)
+  assert.deepEqual(applyCommand(completed, { type: 'start', id: 'one' }), completed)
+  reopened.commit(completed)
+  assert.deepEqual(new TaskStore(dir).tasks, completed)
+  assert.deepEqual(applyCommand([], { type: 'import', text: serializeTasks(completed) }), completed)
+  assert.deepEqual(applyCommand(completed, { type: 'toggle', id: 'one' }), [task()])
+})
+
+test('legacy tasks remain undated; completion without starting does not invent a duration', () => {
+  const old = task({ done: true })
+  assert.deepEqual(parseTasks(serializeTasks([old])), [old])
+  const [completed] = applyCommand([task()], { type: 'toggle', id: 'one' }, Date.parse('2026-09-22T08:00:00.000Z'))
+  assert.equal(completed.startedAt, undefined)
+  assert.equal(completed.completedAt, '2026-09-22T08:00:00.000Z')
+})
+
+test('invalid timing imports and clock rollback cannot replace stored data', t => {
+  const { store } = fixture(t)
+  const valid = task({ startedAt: '2026-09-22T08:00:00.000Z' })
+  store.command({ type: 'upsert', task: valid })
+  const before = readFileSync(store.file, 'utf8')
+  for (const changes of [
+    { startedAt: null }, { startedAt: 42 }, { startedAt: '2026-02-30T08:00:00.000Z' },
+    { completedAt: '2026-09-22T09:00:00.000Z' },
+    { done: true }, { done: true, completedAt: '2026-09-22T07:00:00.000Z' },
+  ]) {
+    assert.throws(() => store.command({ type: 'import', text: JSON.stringify([{ ...valid, ...changes, id: 'invalid' }]) }))
+    assert.equal(readFileSync(store.file, 'utf8'), before)
+  }
+  assert.throws(() => applyCommand(store.tasks, { type: 'complete', id: 'one' }, Date.parse('2026-09-22T07:00:00.000Z')), /早于/)
+  assert.deepEqual(store.tasks, [valid])
+})

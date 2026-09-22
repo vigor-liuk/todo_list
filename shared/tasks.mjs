@@ -21,8 +21,18 @@ export function validateTasks(value) {
         d.getFullYear() !== +match[1] || d.getMonth() + 1 !== +match[2] || d.getDate() !== +match[3] ||
         d.getHours() !== +match[4] || d.getMinutes() !== +match[5]) throw Error('任务文件包含不存在的日期。')
     }
+    const timing = {}
+    for (const field of ['startedAt', 'completedAt']) {
+      if (t[field] === undefined) continue
+      const timestamp = t[field]
+      if (typeof timestamp !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp) ||
+        !Number.isFinite(Date.parse(timestamp)) || new Date(timestamp).toISOString() !== timestamp) throw Error('实际时间格式无效。')
+      timing[field] = timestamp
+    }
+    if (timing.startedAt && timing.completedAt && timing.completedAt < timing.startedAt) throw Error('完成时间不能早于开始时间。')
+    if (timing.completedAt && !t.done || t.done && timing.startedAt && !timing.completedAt) throw Error('实际时间与任务完成状态不一致。')
     ids.add(t.id)
-    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded }
+    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded, ...timing }
   })
 }
 
@@ -40,7 +50,7 @@ export function serializeTasks(tasks) {
   return text
 }
 
-export function applyCommand(tasks, command) {
+export function applyCommand(tasks, command, now = Date.now()) {
   if (!command || typeof command !== 'object') throw Error('无效操作。')
   if (command.type === 'import') {
     const imported = parseTasks(command.text)
@@ -54,7 +64,16 @@ export function applyCommand(tasks, command) {
     return validateTasks(previous ? tasks.map(t => t.id === task.id ? task : t) : [...tasks, task])
   }
   if (command.type === 'delete') return tasks.filter(t => t.id !== command.id)
-  if (command.type === 'toggle') return tasks.map(t => t.id === command.id ? { ...t, done: !t.done } : t)
+  if (['start', 'complete', 'toggle'].includes(command.type)) return validateTasks(tasks.map(t => {
+    if (t.id !== command.id) return t
+    if (command.type === 'start') return t.done || t.startedAt ? t : { ...t, startedAt: new Date(now).toISOString() }
+    if (t.done) {
+      if (command.type === 'complete') return t
+      const { startedAt: _startedAt, completedAt: _completedAt, ...rest } = t
+      return { ...rest, done: false }
+    }
+    return { ...t, done: true, completedAt: new Date(now).toISOString() }
+  }))
   throw Error('不支持的操作。')
 }
 

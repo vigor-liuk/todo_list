@@ -3,6 +3,46 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
+test('desktop timing survives restart and completes through the shared command bridge', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'little-day-timing-'))
+  const env = { ...process.env, LITTLE_DAY_DATA_DIR: directory }
+  delete env.ELECTRON_RUN_AS_NODE
+  const launch = () => electron.launch({ args: [resolve('.')], env, timeout: 20000 })
+  let app = await launch()
+  try {
+    let page = await app.firstWindow()
+    await page.getByRole('button', { name: '新建任务', exact: true }).click()
+    await page.getByLabel('准备做点什么？').fill('桌面时间记录')
+    await page.getByLabel('到期提醒时间').fill('')
+    await page.getByRole('button', { name: '添加任务', exact: true }).click()
+    await page.getByRole('button', { name: /全部任务/ }).click()
+    await page.getByRole('button', { name: '开始：桌面时间记录', exact: true }).click()
+    await expect(page.locator('.task-timing')).toContainText('进行中')
+    const file = join(directory, 'tasks.json')
+    const startedAt = JSON.parse(await readFile(file, 'utf8')).tasks[0].startedAt
+    expect(Number.isFinite(Date.parse(startedAt))).toBe(true)
+    await app.close()
+    app = await launch()
+    page = await app.firstWindow()
+    await page.getByRole('button', { name: /^时间回顾/ }).click()
+    await expect(page.locator('.chart-row')).toContainText('桌面时间记录')
+    await page.getByRole('button', { name: '查看记录：桌面时间记录', exact: true }).click()
+    await page.getByRole('button', { name: '结束并完成', exact: true }).click()
+    await expect(page.locator('.chart-task')).toContainText('已完成')
+    const completed = JSON.parse(await readFile(file, 'utf8')).tasks[0]
+    expect(completed.startedAt).toBe(startedAt)
+    expect(Date.parse(completed.completedAt)).toBeGreaterThanOrEqual(Date.parse(startedAt))
+    await app.close()
+    app = await launch()
+    page = await app.firstWindow()
+    await page.getByRole('button', { name: /^时间回顾/ }).click()
+    await expect(page.locator('.chart-task')).toContainText('已完成')
+  } finally {
+    await app.close()
+    await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 })
+  }
+})
+
 test('desktop storage, isolated renderer, import/export, hidden reminders and restart', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'little-day-desktop-'))
   const env = { ...process.env, LITTLE_DAY_DATA_DIR: directory }
