@@ -1,4 +1,5 @@
-export type Task = { id: string; title: string; note: string; category: string; priority: string; due: string; done: boolean; reminded: boolean }
+import type { RecommendationRecord } from './recommendation-record.mjs'
+export type Task = { id: string; title: string; note: string; category: string; priority: string; due: string; done: boolean; reminded: boolean; recommendation?: RecommendationRecord }
 export type Command = { type: 'upsert'; task: Task } | { type: 'delete' | 'toggle'; id: string } | { type: 'import'; text: string }
 export type Snapshot = { tasks: Task[]; alerts: Task[] }
 export const storageKey: string

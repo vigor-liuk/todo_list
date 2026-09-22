@@ -11,6 +11,7 @@ test('desktop storage, isolated renderer, import/export, hidden reminders and re
   let app = await launch()
   try {
     let page = await app.firstWindow()
+    await page.getByRole('button', { name: '暂时跳过', exact: true }).click()
     await page.route('https://v1.hitokoto.cn/**', route => route.abort())
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))

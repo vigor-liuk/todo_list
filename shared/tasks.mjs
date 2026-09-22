@@ -1,3 +1,4 @@
+import { localDate, validateRecord } from './recommendation-record.mjs'
 export const storageKey = 'little-day-tasks-v1'
 export const maxBytes = 10 * 1024 * 1024
 export const categories = ['课内', '课外', '生活', '个人']
@@ -22,7 +23,7 @@ export function validateTasks(value) {
         d.getHours() !== +match[4] || d.getMinutes() !== +match[5]) throw Error('任务文件包含不存在的日期。')
     }
     ids.add(t.id)
-    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded }
+    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded, ...(t.recommendation === undefined ? {} : { recommendation: validateRecord(t.recommendation) }) }
   })
 }
 
@@ -50,11 +51,23 @@ export function applyCommand(tasks, command) {
   if (command.type === 'upsert') {
     const task = validateTasks([command.task])[0]
     const previous = tasks.find(t => t.id === task.id)
+    if (previous?.recommendation) {
+      const old = previous.recommendation
+      const r = task.recommendation || old
+      task.recommendation = { ...old, goal: r.goal, minutes: r.minutes, trackProgress: r.trackProgress }
+      if (old.goal !== r.goal) task.done = false
+      if (previous.title !== task.title || previous.note !== task.note || old.goal !== r.goal || old.minutes !== r.minutes) {
+        // A free-text rewrite cannot be assumed to describe the same measurable activity.
+        if (previous.title !== task.title && old.goal === r.goal) task.recommendation.trackProgress = false
+        task.recommendation.changes = [...old.changes, { title: task.title, note: task.note, goal: r.goal, minutes: r.minutes, at: new Date().toISOString() }].slice(-20)
+      }
+      task.recommendation.completedDate = task.done ? (old.completedDate || localDate()) : ''
+    }
     task.reminded = previous?.due === task.due ? previous.reminded : false
     return validateTasks(previous ? tasks.map(t => t.id === task.id ? task : t) : [...tasks, task])
   }
   if (command.type === 'delete') return tasks.filter(t => t.id !== command.id)
-  if (command.type === 'toggle') return tasks.map(t => t.id === command.id ? { ...t, done: !t.done } : t)
+  if (command.type === 'toggle') return tasks.map(t => t.id === command.id ? { ...t, done: !t.done, ...(t.recommendation ? { recommendation: { ...t.recommendation, completedDate: !t.done ? localDate() : '' } } : {}) } : t)
   throw Error('不支持的操作。')
 }
 

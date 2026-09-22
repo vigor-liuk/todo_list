@@ -64,7 +64,7 @@ else {
     session.defaultSession.setPermissionCheckHandler(() => false)
     session.defaultSession.webRequest.onHeadersReceived((details, callback) => callback({ responseHeaders: {
       ...details.responseHeaders,
-      'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://v1.hitokoto.cn; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'"],
+      'Content-Security-Policy': ["default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://v1.hitokoto.cn https://zh.wikipedia.org; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'"],
     } }))
     ipcMain.handle('tasks:load', event => { authorized(event); return store.snapshot() })
     ipcMain.handle('tasks:command', (event, command) => { authorized(event); const result = store.command(command); broadcast(); return result })
@@ -94,7 +94,7 @@ else {
     })
     Menu.setApplicationMenu(null)
     window.webContents.setWindowOpenHandler(({ url }) => {
-      if (url === 'https://hitokoto.cn/') void shell.openExternal(url)
+      if (url === 'https://hitokoto.cn/' || /^https:\/\/zh\.wikipedia\.org\/wiki\/[^\s]+$/.test(url)) void shell.openExternal(url)
       return { action: 'deny' }
     })
     window.webContents.on('will-navigate', (event, url) => { if (url !== rootURL) event.preventDefault() })
