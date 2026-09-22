@@ -1,3 +1,4 @@
+import { localDate, validateRecord } from './recommendation-record.mjs'
 export const storageKey = 'little-day-tasks-v1'
 export const maxBytes = 10 * 1024 * 1024
 export const categories = ['课内', '课外', '生活', '个人']
@@ -32,7 +33,7 @@ export function validateTasks(value) {
     if (timing.startedAt && timing.completedAt && timing.completedAt < timing.startedAt) throw Error('完成时间不能早于开始时间。')
     if (timing.completedAt && !t.done || t.done && timing.startedAt && !timing.completedAt) throw Error('实际时间与任务完成状态不一致。')
     ids.add(t.id)
-    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded, ...timing }
+    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded, ...timing, ...(t.recommendation === undefined ? {} : { recommendation: validateRecord(t.recommendation) }) }
   })
 }
 
@@ -60,6 +61,18 @@ export function applyCommand(tasks, command, now = Date.now()) {
   if (command.type === 'upsert') {
     const task = validateTasks([command.task])[0]
     const previous = tasks.find(t => t.id === task.id)
+    if (previous?.recommendation) {
+      const old = previous.recommendation
+      const r = task.recommendation || old
+      task.recommendation = { ...old, goal: r.goal, minutes: r.minutes, trackProgress: r.trackProgress }
+      if (old.goal !== r.goal) { task.done = false; delete task.startedAt; delete task.completedAt }
+      if (previous.title !== task.title || previous.note !== task.note || old.goal !== r.goal || old.minutes !== r.minutes) {
+        // A free-text rewrite cannot be assumed to describe the same measurable activity.
+        if (previous.title !== task.title && old.goal === r.goal) task.recommendation.trackProgress = false
+        task.recommendation.changes = [...old.changes, { title: task.title, note: task.note, goal: r.goal, minutes: r.minutes, at: new Date().toISOString() }].slice(-20)
+      }
+      task.recommendation.completedDate = task.done ? (task.completedAt ? localDate(new Date(task.completedAt)) : old.completedDate || localDate(new Date(now))) : ''
+    }
     task.reminded = previous?.due === task.due ? previous.reminded : false
     return validateTasks(previous ? tasks.map(t => t.id === task.id ? task : t) : [...tasks, task])
   }
@@ -70,9 +83,9 @@ export function applyCommand(tasks, command, now = Date.now()) {
     if (t.done) {
       if (command.type === 'complete') return t
       const { startedAt: _startedAt, completedAt: _completedAt, ...rest } = t
-      return { ...rest, done: false }
+      return { ...rest, done: false, ...(t.recommendation ? { recommendation: { ...t.recommendation, completedDate: '' } } : {}) }
     }
-    return { ...t, done: true, completedAt: new Date(now).toISOString() }
+    return { ...t, done: true, completedAt: new Date(now).toISOString(), ...(t.recommendation ? { recommendation: { ...t.recommendation, completedDate: localDate(new Date(now)) } } : {}) }
   }))
   throw Error('不支持的操作。')
 }

@@ -11,6 +11,7 @@ test('desktop timing survives restart and completes through the shared command b
   let app = await launch()
   try {
     let page = await app.firstWindow()
+    await page.getByRole('button', { name: '暂时跳过', exact: true }).click()
     await page.getByRole('button', { name: '新建任务', exact: true }).click()
     await page.getByLabel('准备做点什么？').fill('桌面时间记录')
     await page.getByLabel('到期提醒时间').fill('')
@@ -51,6 +52,7 @@ test('desktop storage, isolated renderer, import/export, hidden reminders and re
   let app = await launch()
   try {
     let page = await app.firstWindow()
+    await page.getByRole('button', { name: '暂时跳过', exact: true }).click()
     await page.route('https://v1.hitokoto.cn/**', route => route.abort())
     const errors: string[] = []
     page.on('pageerror', error => errors.push(error.message))

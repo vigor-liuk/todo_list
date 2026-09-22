@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test('web export migrates task data; invalid import is harmless and valid import requires confirmation', async ({ page }) => {
   await page.goto('/')

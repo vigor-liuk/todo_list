@@ -14,6 +14,7 @@ try {
   assert.equal(info.data.toLowerCase(), directory.toLowerCase(), 'Must use an isolated test profile')
   const page = await app.firstWindow()
   await page.route('https://v1.hitokoto.cn/**', route => route.abort())
+  await page.getByRole('button', { name: '暂时跳过', exact: true }).click()
   await page.getByRole('button', { name: '新建任务', exact: true }).click()
   await page.getByLabel('准备做点什么？').fill('安装版离线验证')
   await page.getByLabel('到期提醒时间').fill('')

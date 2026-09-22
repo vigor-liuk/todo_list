@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 const task = (changes = {}) => ({ id: 'tracked', title: '阅读目标', note: '每天读一点', category: '课内', priority: '中', due: '2026-09-22T10:00', done: false, reminded: true, ...changes })
 test.use({ timezoneId: 'Asia/Shanghai' })

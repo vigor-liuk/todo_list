@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures'
 
 test('legacy categories migrate without losing tasks', async ({ page }) => {
   await page.addInitScript(() => {
