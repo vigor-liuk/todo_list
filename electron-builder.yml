@@ -1,0 +1,28 @@
+appId: cn.littleday.todo
+productName: 小日
+directories:
+  output: release
+  buildResources: build
+files:
+  - dist/**/*
+  - electron/**/*
+  - shared/**/*
+  - build/icon.png
+  - package.json
+asar: true
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.ico
+  executableName: LittleDay
+  artifactName: LittleDay-Setup-${version}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: 小日
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false

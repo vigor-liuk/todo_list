@@ -1,0 +1,37 @@
+{
+  "name": "todo_list",
+  "private": true,
+  "version": "1.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "playwright test",
+    "desktop": "npm run build && electron .",
+    "dist:win": "npm run build && electron --version && electron-builder --win nsis --x64 --config.electronDist=node_modules/electron/dist",
+    "test:unit": "node --test tests-unit/*.test.mjs",
+    "test:desktop": "npm run build && playwright test --config playwright.desktop.config.ts",
+    "test:packaged": "node scripts/verify-packaged.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "electron": "^44.4.3",
+    "electron-builder": "^26.15.3",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0"
+  },
+  "main": "electron/main.mjs",
+  "description": "小日 · 本地待办事项与桌面提醒",
+  "author": "Little Day"
+}
