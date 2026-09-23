@@ -1,5 +1,24 @@
 # Windows 验证记录
 
+## 1.0.3 周期任务与 GitHub 发布
+
+- `package.json` 与锁文件版本同步为 1.0.3；桌面包包含每天、每周和每月重复任务、各周期独立完成与提醒状态、历史用时记录。
+- lint、22 项单元测试、32 项浏览器测试和 3 项桌面端到端测试通过。浏览器测试以 2 个并发进程运行；首次默认 12 个并发进程时部分测试因资源争用超时。
+- 1.0.3 打包程序通过独立临时数据目录运行验证，检查版本、推荐、任务计时、重复任务创建及落盘、时间回顾和离线持久化。
+- 安装包 `release/LittleDay-Setup-1.0.3.exe` 大小 112146111 字节，SHA-256：`034d7c33c9525a8348c7cbc0fceeb7d26fed6702fd6cf2ef0d9bd166b6c0ea7c`。
+- 本机 `D:\software\LittleDay` 已从 1.0.2 升级到 1.0.3，Windows 卸载登记和可执行文件版本均为 1.0.3。安装后独立运行验证通过，安装目录 `app.asar` 与打包产物 SHA-256 一致。升级前已备份 `%APPDATA%\LittleDay` 至 `release/backups/LittleDay-before-1.0.3-20260923-214033`，原始 `tasks.json` SHA-256 未变化。
+- 本地生成目录 `release/`、`dist/` 和 `node_modules/` 继续由 `.gitignore` 排除；安装包上传到 GitHub Release，而不是纳入源码提交。GitHub 普通仓库文件上限为 100 MB，此安装包约 112 MB。
+
+## 1.0.2 功能同步验证
+
+- 同步最新网页代码：每日推荐、偏好引导、递进目标、任务计时和每日时间回顾；版本号及使用说明更新为 1.0.2。
+- 生产构建、lint、16 项单元测试、3 项桌面端到端测试通过。桌面测试覆盖计时跨重启、推荐及调整记录落盘、导入导出、备份和后台提醒。
+- 打包程序在独立临时数据目录运行，通过版本号校验、推荐卡片展示、离线任务创建、开始/完成计时、时间回顾和任务文件持久化验证；子进程 PATH 中移除了 Node.js 路径。
+- 本次环境中构建工具缓存目录重命名出现 EXDEV / EPERM；使用项目 `.cache/electron-builder` 缓存，并通过 `ELECTRON_BUILDER_NSIS_DIR` 和 `ELECTRON_BUILDER_NSIS_RESOURCES_DIR` 指向已解压的工具目录完成打包。两份原始工具压缩包均与 electron-builder 内置 SHA-256 校验值一致，未修改依赖或关闭校验。
+- 新安装包为 `release/LittleDay-Setup-1.0.2.exe`，112143380 字节；SHA-256：`e2a2e14e00b839f7a86ad8e03119c03b42b774e8cccf709f0e0a597d661b8176`，同时保存于同名 `.sha256` 文件。
+- 已覆盖升级本机 `D:\software\LittleDay` 的 1.0.1 安装，安装器退出码为 0，程序文件和 Windows 卸载登记版本均为 1.0.2。安装后的程序通过同一套独立数据目录验证，安装目录 `app.asar` 与打包产物 SHA-256 一致。
+- 升级前完整备份 `%APPDATA%\LittleDay` 至 `release/backups/LittleDay-before-1.0.2-20260922-182756/LittleDay`；升级后原始 `tasks.json` SHA-256 未变化，用户任务未被测试或安装覆盖。
+
 ## 周期任务（2026-09-23）
 
 - 生产构建、oxlint 通过；22 项单元测试通过。

@@ -2,10 +2,11 @@
 
 使用 React + TypeScript + Vite 开发的中文待办提醒工具。
 
-## Windows 独立应用（1.0.1）
+## Windows 独立应用（1.0.3）
 
-运行 `release/LittleDay-Setup-1.0.1.exe` 安装，随后双击桌面「小日」图标即可使用。
+从 [GitHub Releases 下载 LittleDay-Setup-1.0.3.exe](https://github.com/vigor-liuk/todo_list/releases/tag/v1.0.3)，运行安装包后双击桌面「小日」图标即可使用。本地构建的安装包位于 `release/LittleDay-Setup-1.0.3.exe`。
 支持 Windows 10/11 x64；使用者无需安装 Node.js、登录 Codex、启动终端或打开浏览器。
+1.0.3 同步最新网页版功能，包括每日推荐、任务实际时间记录、每日时间回顾，以及每天、每周和每月重复任务。
 首版无需账号、无需服务器，任务管理可以断网使用。安装包尚未使用商业代码签名证书签名。
 
 - 点击窗口关闭按钮会隐藏到系统托盘，后台继续提醒。单击托盘图标或右键选择「打开小日」恢复窗口；右键「退出」彻底结束程序。
@@ -47,6 +48,7 @@ npm run test:packaged
 ```
 
 `desktop` 构建并加载本地资源，不启动开发服务器。`dist:win` 生成 x64 NSIS 安装包。
+`release/`、`dist/`、`node_modules/` 均为本地生成目录，不纳入 Git 仓库；Windows 安装包作为 GitHub Release 附件下载。克隆源码后运行 `npm ci` 和 `npm run dist:win` 也可在本地生成安装包。
 首次安装构建依赖时需要联网下载 Electron 和打包工具；最终安装包包含运行所需环境。
 `test:packaged` 在独立临时数据目录运行打包后的 exe，并移除子进程 PATH 中的 Node.js 路径，检查本地界面和任务保存。也可运行 `node scripts/verify-packaged.mjs "安装目录/LittleDay.exe"` 检查安装结果。
 若 GitHub 下载超时，可为当前构建终端设置 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`；工具仍按内置校验值验证下载文件。`dist:win` 复用已安装的 Electron 运行时，避免再次下载。
