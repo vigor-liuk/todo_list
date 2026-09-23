@@ -4,6 +4,7 @@ import { dateKey } from './taskRepository'
 import { dayRecords, durationLabel, timingLabel } from './taskTime'
 
 type Props = { tasks: Task[]; day: string; today: string; now: number; onDay: (day: string) => void; onEdit: (task: Task) => void; onComplete: (task: Task) => void }
+const recordKey = (task: Task) => `${task.id}:${task.due}`
 const hours = Array.from({ length: 25 }, (_, hour) => hour)
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
@@ -11,11 +12,11 @@ export function TimeReview({ tasks, day, today, now, onDay, onEdit, onComplete }
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const records = dayRecords(tasks, day, now)
   const completed = records.filter(({ task }) => task.completedAt && dateKey(new Date(task.completedAt)) === day).length
-  const recordedIds = new Set(records.map(({ task }) => task.id))
-  const planned = tasks.filter(task => task.due.startsWith(day) && !recordedIds.has(task.id))
+  const recordedIds = new Set(records.map(({ task }) => recordKey(task)))
+  const planned = tasks.filter(task => task.due.startsWith(day) && !recordedIds.has(recordKey(task)))
   const rows = [...records, ...planned.map(task => ({ task, duration: 0 }))]
     .sort((a, b) => Date.parse(a.task.startedAt || a.task.completedAt || a.task.due) - Date.parse(b.task.startedAt || b.task.completedAt || b.task.due))
-  const selected = rows.find(({ task }) => task.id === selectedId)
+  const selected = rows.find(({ task }) => recordKey(task) === selectedId)
   const start = new Date(`${day}T00:00:00`).getTime()
   const nextDay = new Date(start)
   nextDay.setDate(nextDay.getDate() + 1)
@@ -45,16 +46,16 @@ export function TimeReview({ tasks, day, today, now, onDay, onEdit, onComplete }
         <div className="chart-header"><div className="chart-label">任务 / 状态</div><div className="hour-axis">{hours.map(hour => <span key={hour} style={{ left: `${hour / 24 * 100}%` }}>{hourLabel(hour)}</span>)}</div></div>
         <div className="chart-body">
           {rows.map(({ task, duration }) => {
-            const hasRecord = recordedIds.has(task.id)
+            const hasRecord = recordedIds.has(recordKey(task))
             const from = hasRecord ? position(Date.parse(task.startedAt || task.completedAt!)) : 0
             const to = hasRecord ? position(task.completedAt ? Date.parse(task.completedAt) : now) : 0
             const point = !task.startedAt || duration === 0
             const description = `${task.title} · ${status(task)}${hasRecord ? ` · ${timingLabel(task, now, day)} · 当天用时：${durationLabel(duration)}` : ' · 未记录执行时间'}`
-            return <div className={`chart-row ${selectedId === task.id ? 'is-selected' : ''}`} key={task.id}>
-              <button className="chart-label chart-task" title={`${description}；点击查看详情`} aria-label={`查看记录：${task.title}`} aria-pressed={selectedId === task.id} onClick={() => setSelectedId(task.id)}><strong>{task.title}</strong><span className={task.startedAt && !task.done ? 'status-running' : ''}>{status(task)} · {hasRecord && task.startedAt ? durationLabel(duration) : hasRecord ? '仅完成时刻' : '无执行记录'}</span></button>
+            return <div className={`chart-row ${selectedId === recordKey(task) ? 'is-selected' : ''}`} key={recordKey(task)}>
+              <button className="chart-label chart-task" title={`${description}；点击查看详情`} aria-label={`查看记录：${task.title}`} aria-pressed={selectedId === recordKey(task)} onClick={() => setSelectedId(recordKey(task))}><strong>{task.title}</strong><span className={task.startedAt && !task.done ? 'status-running' : ''}>{status(task)} · {hasRecord && task.startedAt ? durationLabel(duration) : hasRecord ? '仅完成时刻' : '无执行记录'}</span></button>
               <div className="chart-track">
-                {hasRecord && <button className={`execution-bar ${task.done ? 'bar-completed' : 'bar-running'} ${point ? 'completion-point' : ''}`} style={{ left: `${from}%`, width: point ? undefined : `${Math.max(0, to - from)}%` }} title={`${description}；点击查看详情`} aria-label={description} onClick={() => setSelectedId(task.id)}>{!point && <span>{durationLabel(duration)}</span>}</button>}
-                {task.due.startsWith(day) && <button className="planned-marker" style={{ left: `${position(Date.parse(task.due))}%` }} title={`${task.title} · 原定提醒 ${task.due.slice(11, 16)}；点击查看详情`} aria-label={`原定提醒：${task.title} ${task.due.slice(11, 16)}`} onClick={() => setSelectedId(task.id)}/>}
+                {hasRecord && <button className={`execution-bar ${task.done ? 'bar-completed' : 'bar-running'} ${point ? 'completion-point' : ''}`} style={{ left: `${from}%`, width: point ? undefined : `${Math.max(0, to - from)}%` }} title={`${description}；点击查看详情`} aria-label={description} onClick={() => setSelectedId(recordKey(task))}>{!point && <span>{durationLabel(duration)}</span>}</button>}
+                {task.due.startsWith(day) && <button className="planned-marker" style={{ left: `${position(Date.parse(task.due))}%` }} title={`${task.title} · 原定提醒 ${task.due.slice(11, 16)}；点击查看详情`} aria-label={`原定提醒：${task.title} ${task.due.slice(11, 16)}`} onClick={() => setSelectedId(recordKey(task))}/>}
               </div>
             </div>
           })}
