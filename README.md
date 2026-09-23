@@ -5,6 +5,7 @@
 ## Windows 独立应用（1.0.3）
 
 从 [GitHub Releases 下载 LittleDay-Setup-1.0.3.exe](https://github.com/vigor-liuk/todo_list/releases/tag/v1.0.3)，运行安装包后双击桌面「小日」图标即可使用。本地构建的安装包位于 `release/LittleDay-Setup-1.0.3.exe`。
+旧版 1.0.0–1.0.2 安装包也保存在 [GitHub Releases](https://github.com/vigor-liuk/todo_list/releases)。这些早期版本没有逐版保存精确对应的源码提交；其发布页自动生成的源码压缩包不保证与当时的安装包完全一致，请按版本下载对应的 `LittleDay-Setup-*.exe`。
 支持 Windows 10/11 x64；使用者无需安装 Node.js、登录 Codex、启动终端或打开浏览器。
 1.0.3 同步最新网页版功能，包括每日推荐、任务实际时间记录、每日时间回顾，以及每天、每周和每月重复任务。
 首版无需账号、无需服务器，任务管理可以断网使用。安装包尚未使用商业代码签名证书签名。
@@ -49,6 +50,7 @@ npm run test:packaged
 
 `desktop` 构建并加载本地资源，不启动开发服务器。`dist:win` 生成 x64 NSIS 安装包。
 `release/`、`dist/`、`node_modules/` 均为本地生成目录，不纳入 Git 仓库；Windows 安装包作为 GitHub Release 附件下载。克隆源码后运行 `npm ci` 和 `npm run dist:win` 也可在本地生成安装包。
+后续每次发布桌面版时，更新应用版本号与锁文件，验证并推送源码和版本标签，再将安装包及 `.sha256` 校验文件上传到对应的 GitHub Release；发布成功并核对远端文件后，本地 `release/` 只保留最新版本的安装包。用户数据备份不属于安装包，单独保留。
 首次安装构建依赖时需要联网下载 Electron 和打包工具；最终安装包包含运行所需环境。
 `test:packaged` 在独立临时数据目录运行打包后的 exe，并移除子进程 PATH 中的 Node.js 路径，检查本地界面和任务保存。也可运行 `node scripts/verify-packaged.mjs "安装目录/LittleDay.exe"` 检查安装结果。
 若 GitHub 下载超时，可为当前构建终端设置 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/`；工具仍按内置校验值验证下载文件。`dist:win` 复用已安装的 Electron 运行时，避免再次下载。
