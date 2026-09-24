@@ -117,6 +117,20 @@ test('legacy tasks remain undated; completion without starting does not invent a
   assert.equal(completed.completedAt, '2026-09-22T08:00:00.000Z')
 })
 
+test('pause and resume persist multiple intervals and completion closes an open pause', () => {
+  const at = value => Date.parse(`2026-09-22T${value}:00.000Z`)
+  let tasks = [task()]
+  for (const [type, time] of [['start', '08:00'], ['pause', '08:10'], ['resume', '08:30'], ['pause', '08:45']]) {
+    tasks = applyCommand(tasks, { type, id: 'one' }, at(time))
+  }
+  assert.deepEqual(applyCommand(tasks, { type: 'pause', id: 'one' }, at('08:50')), tasks)
+  assert.deepEqual(parseTasks(serializeTasks(tasks)), tasks)
+  tasks = applyCommand(tasks, { type: 'complete', id: 'one' }, at('09:00'))
+  assert.equal(tasks[0].pauses[1].endedAt, '2026-09-22T09:00:00.000Z')
+  assert.deepEqual(applyCommand(tasks, { type: 'toggle', id: 'one' })[0], task())
+  assert.throws(() => parseTasks(JSON.stringify([task({ startedAt: '2026-09-22T08:00:00.000Z', pauses: [{ startedAt: '2026-09-22T08:20:00.000Z', endedAt: '2026-09-22T08:10:00.000Z' }] })])))
+})
+
 test('invalid timing imports and clock rollback cannot replace stored data', t => {
   const { store } = fixture(t)
   const valid = task({ startedAt: '2026-09-22T08:00:00.000Z' })

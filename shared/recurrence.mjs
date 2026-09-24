@@ -16,7 +16,7 @@ export function occurrenceDate(rule, day) {
 }
 
 export function occurrenceState(task) {
-  return { done: task.done, reminded: task.reminded, ...(task.startedAt ? { startedAt: task.startedAt } : {}), ...(task.completedAt ? { completedAt: task.completedAt } : {}) }
+  return { done: task.done, reminded: task.reminded, ...(task.startedAt ? { startedAt: task.startedAt } : {}), ...(task.completedAt ? { completedAt: task.completedAt } : {}), ...(task.pauses?.length ? { pauses: task.pauses } : {}) }
 }
 
 export function projectTask(task, day = dateKey(new Date())) {
@@ -29,7 +29,7 @@ export function projectTask(task, day = dateKey(new Date())) {
 export function projectOccurrence(task, date) {
   if (!task.recurrence) return task
   const state = task.recurrence.records[date] || { done: false, reminded: false }
-  return { ...task, startedAt: undefined, completedAt: undefined, ...state, due: `${date}T${task.recurrence.time}` }
+  return { ...task, startedAt: undefined, completedAt: undefined, pauses: undefined, ...state, due: `${date}T${task.recurrence.time}` }
 }
 
 export function reviewOccurrences(tasks, day) {

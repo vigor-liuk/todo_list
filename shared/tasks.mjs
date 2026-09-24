@@ -24,15 +24,27 @@ export function validateTasks(value) {
         d.getHours() !== +match[4] || d.getMinutes() !== +match[5]) throw Error('任务文件包含不存在的日期。')
     }
     const timing = {}
+    const validTimestamp = timestamp => typeof timestamp === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp) && Number.isFinite(Date.parse(timestamp)) && new Date(timestamp).toISOString() === timestamp
     for (const field of ['startedAt', 'completedAt']) {
       if (t[field] === undefined) continue
       const timestamp = t[field]
-      if (typeof timestamp !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(timestamp) ||
-        !Number.isFinite(Date.parse(timestamp)) || new Date(timestamp).toISOString() !== timestamp) throw Error('实际时间格式无效。')
+      if (!validTimestamp(timestamp)) throw Error('实际时间格式无效。')
       timing[field] = timestamp
     }
     if (timing.startedAt && timing.completedAt && timing.completedAt < timing.startedAt) throw Error('完成时间不能早于开始时间。')
     if (timing.completedAt && !t.done || t.done && timing.startedAt && !timing.completedAt) throw Error('实际时间与任务完成状态不一致。')
+    if (t.pauses !== undefined) {
+      if (!Array.isArray(t.pauses) || !timing.startedAt || t.pauses.length > 1000) throw Error('暂停记录无效。')
+      let previous = timing.startedAt
+      timing.pauses = t.pauses.map((pause, index) => {
+        if (!pause || !validTimestamp(pause.startedAt) || pause.startedAt < previous ||
+          (pause.endedAt !== undefined && (!validTimestamp(pause.endedAt) || pause.endedAt < pause.startedAt)) ||
+          (pause.endedAt === undefined && (index !== t.pauses.length - 1 || t.done)) ||
+          (timing.completedAt && (pause.startedAt > timing.completedAt || pause.endedAt && pause.endedAt > timing.completedAt))) throw Error('暂停记录无效。')
+        previous = pause.endedAt || pause.startedAt
+        return { startedAt: pause.startedAt, ...(pause.endedAt ? { endedAt: pause.endedAt } : {}) }
+      })
+    }
     let recurrence
     if (t.recurrence !== undefined) {
       const r = t.recurrence
@@ -42,7 +54,7 @@ export function validateTasks(value) {
       const records = {}
       for (const [day, state] of Object.entries(r.records)) {
         if (!validDate(day) || !state || typeof state !== 'object') throw Error('周期任务记录无效。')
-        const record = validateTasks([{ ...t, recurrence: undefined, recommendation: undefined, done: state.done, reminded: state.reminded, startedAt: state.startedAt, completedAt: state.completedAt, due: `${day}T12:00` }])[0]
+        const record = validateTasks([{ ...t, recurrence: undefined, recommendation: undefined, done: state.done, reminded: state.reminded, startedAt: state.startedAt, completedAt: state.completedAt, pauses: state.pauses, due: `${day}T12:00` }])[0]
         records[day] = occurrenceState(record)
       }
       recurrence = { frequency: r.frequency, start: r.start, time: r.time, ...(r.minutes === undefined ? {} : { minutes: r.minutes }), records }
@@ -90,7 +102,7 @@ function executeCommand(tasks, command, now) {
       const old = previous.recommendation
       const r = task.recommendation || old
       task.recommendation = { ...old, goal: r.goal, minutes: r.minutes, trackProgress: r.trackProgress }
-      if (old.goal !== r.goal) { task.done = false; delete task.startedAt; delete task.completedAt }
+      if (old.goal !== r.goal) { task.done = false; delete task.startedAt; delete task.completedAt; delete task.pauses }
       if (previous.title !== task.title || previous.note !== task.note || old.goal !== r.goal || old.minutes !== r.minutes) {
         // A free-text rewrite cannot be assumed to describe the same measurable activity.
         if (previous.title !== task.title && old.goal === r.goal) task.recommendation.trackProgress = false
@@ -102,15 +114,18 @@ function executeCommand(tasks, command, now) {
     return validateTasks(previous ? tasks.map(t => t.id === task.id ? task : t) : [...tasks, task])
   }
   if (command.type === 'delete') return tasks.filter(t => t.id !== command.id)
-  if (['start', 'complete', 'toggle'].includes(command.type)) return validateTasks(tasks.map(t => {
+  if (['start', 'pause', 'resume', 'complete', 'toggle'].includes(command.type)) return validateTasks(tasks.map(t => {
     if (t.id !== command.id) return t
     if (command.type === 'start') return t.done || t.startedAt ? t : { ...t, startedAt: new Date(now).toISOString() }
+    if (command.type === 'pause') return t.done || !t.startedAt || t.pauses?.at(-1)?.endedAt === undefined && t.pauses?.length ? t : { ...t, pauses: [...(t.pauses || []), { startedAt: new Date(now).toISOString() }] }
+    if (command.type === 'resume') return t.done || !t.pauses?.length || t.pauses.at(-1).endedAt ? t : { ...t, pauses: [...t.pauses.slice(0, -1), { ...t.pauses.at(-1), endedAt: new Date(now).toISOString() }] }
     if (t.done) {
       if (command.type === 'complete') return t
-      const { startedAt: _startedAt, completedAt: _completedAt, ...rest } = t
+      const { startedAt: _startedAt, completedAt: _completedAt, pauses: _pauses, ...rest } = t
       return { ...rest, done: false, ...(t.recommendation ? { recommendation: { ...t.recommendation, completedDate: '' } } : {}) }
     }
-    return { ...t, done: true, completedAt: new Date(now).toISOString(), ...(t.recommendation ? { recommendation: { ...t.recommendation, completedDate: localDate(new Date(now)) } } : {}) }
+    const pauses = t.pauses?.at(-1) && !t.pauses.at(-1).endedAt ? [...t.pauses.slice(0, -1), { ...t.pauses.at(-1), endedAt: new Date(now).toISOString() }] : t.pauses
+    return { ...t, done: true, completedAt: new Date(now).toISOString(), ...(pauses ? { pauses } : {}), ...(t.recommendation ? { recommendation: { ...t.recommendation, completedDate: localDate(new Date(now)) } } : {}) }
   }))
   throw Error('不支持的操作。')
 }

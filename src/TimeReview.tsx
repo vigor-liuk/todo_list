@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { Task } from './taskRepository'
 import { dateKey } from './taskRepository'
-import { dayRecords, durationLabel, timingLabel } from './taskTime'
+import { dayRecords, durationLabel, timingLabel, workIntervals } from './taskTime'
 
 type Props = { tasks: Task[]; day: string; today: string; now: number; onDay: (day: string) => void; onEdit: (task: Task) => void; onComplete: (task: Task) => void }
 const recordKey = (task: Task) => `${task.id}:${task.due}`
@@ -33,7 +33,7 @@ export function TimeReview({ tasks, day, today, now, onDay, onEdit, onComplete }
     date.setDate(date.getDate() + offset)
     onDay(dateKey(date))
   }
-  const status = (task: Task) => task.done ? '已完成' : task.startedAt ? '进行中' : '未开始'
+  const status = (task: Task) => task.done ? '已完成' : task.pauses?.length && !task.pauses.at(-1)?.endedAt ? '已暂停' : task.startedAt ? '进行中' : '未开始'
   return <section className="time-review" aria-label="每日时间回顾">
     <div className="review-heading"><div><h2>这一天，时间花在哪里</h2><p>从零点到午夜，看清每件事的安排与实际用时。</p></div>
       <div className="review-date"><button title="回顾前一天" aria-label="回顾前一天" onClick={() => shift(-1)}>‹</button><input type="date" aria-label="回顾日期" value={day} onChange={event => { if (event.target.value) onDay(event.target.value) }}/><button title="回顾后一天" aria-label="回顾后一天" onClick={() => shift(1)}>›</button><button onClick={() => onDay(today)}>今天</button></div>
@@ -47,14 +47,14 @@ export function TimeReview({ tasks, day, today, now, onDay, onEdit, onComplete }
         <div className="chart-body">
           {rows.map(({ task, duration }) => {
             const hasRecord = recordedIds.has(recordKey(task))
+            const intervals = workIntervals(task, now).filter(interval => interval.end > start && interval.start < end)
             const from = hasRecord ? position(Date.parse(task.startedAt || task.completedAt!)) : 0
-            const to = hasRecord ? position(task.completedAt ? Date.parse(task.completedAt) : now) : 0
             const point = !task.startedAt || duration === 0
             const description = `${task.title} · ${status(task)}${hasRecord ? ` · ${timingLabel(task, now, day)} · 当天用时：${durationLabel(duration)}` : ' · 未记录执行时间'}`
             return <div className={`chart-row ${selectedId === recordKey(task) ? 'is-selected' : ''}`} key={recordKey(task)}>
               <button className="chart-label chart-task" title={`${description}；点击查看详情`} aria-label={`查看记录：${task.title}`} aria-pressed={selectedId === recordKey(task)} onClick={() => setSelectedId(recordKey(task))}><strong>{task.title}</strong><span className={task.startedAt && !task.done ? 'status-running' : ''}>{status(task)} · {hasRecord && task.startedAt ? durationLabel(duration) : hasRecord ? '仅完成时刻' : '无执行记录'}</span></button>
               <div className="chart-track">
-                {hasRecord && <button className={`execution-bar ${task.done ? 'bar-completed' : 'bar-running'} ${point ? 'completion-point' : ''}`} style={{ left: `${from}%`, width: point ? undefined : `${Math.max(0, to - from)}%` }} title={`${description}；点击查看详情`} aria-label={description} onClick={() => setSelectedId(recordKey(task))}>{!point && <span>{durationLabel(duration)}</span>}</button>}
+                {hasRecord && (point ? <button className={`execution-bar ${task.done ? 'bar-completed' : 'bar-running'} completion-point`} style={{ left: `${from}%` }} title={`${description}；点击查看详情`} aria-label={description} onClick={() => setSelectedId(recordKey(task))}/> : intervals.map((interval, index) => <button key={index} className={`execution-bar ${task.done ? 'bar-completed' : 'bar-running'}`} style={{ left: `${position(interval.start)}%`, width: `${Math.max(0, position(interval.end) - position(interval.start))}%` }} title={`${description}；点击查看详情`} aria-label={description} onClick={() => setSelectedId(recordKey(task))}>{index === 0 && <span>{durationLabel(duration)}</span>}</button>))}
                 {task.due.startsWith(day) && <button className="planned-marker" style={{ left: `${position(Date.parse(task.due))}%` }} title={`${task.title} · 原定提醒 ${task.due.slice(11, 16)}；点击查看详情`} aria-label={`原定提醒：${task.title} ${task.due.slice(11, 16)}`} onClick={() => setSelectedId(recordKey(task))}/>}
               </div>
             </div>

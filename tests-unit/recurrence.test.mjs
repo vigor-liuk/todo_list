@@ -67,6 +67,16 @@ test('running sessions can finish across midnight before the next occurrence beg
   assert.equal(tasks[0].recurrence.records['2026-09-22'].done, true)
 })
 
+test('recurring task keeps pause history with its occurrence', () => {
+  let tasks = applyCommand([task()], { type: 'start', id: 'english' }, time('2026-09-22T20:00'))
+  tasks = applyCommand(tasks, { type: 'pause', id: 'english' }, time('2026-09-22T20:10'))
+  tasks = applyCommand(tasks, { type: 'resume', id: 'english' }, time('2026-09-22T20:20'))
+  tasks = applyCommand(tasks, { type: 'complete', id: 'english' }, time('2026-09-22T20:30'))
+  tasks = parseTasks(serializeTasks(tasks))
+  assert.equal(projectTask(tasks[0], '2026-09-22').pauses[0].endedAt, new Date(time('2026-09-22T20:20')).toISOString())
+  assert.equal(projectTask(tasks[0], '2026-09-23').pauses, undefined)
+})
+
 test('invalid recurrence data fails import and old tasks remain compatible', () => {
   for (const change of [{ start: '2026-02-30' }, { time: '25:00' }, { frequency: 'yearly' }, { minutes: 0 }, { records: { bad: {} } }, { records: { '2026-09-22': { done: 'yes', reminded: false } } }]) {
     assert.throws(() => validateTasks([{ ...task(), recurrence: { ...task().recurrence, ...change } }]))
