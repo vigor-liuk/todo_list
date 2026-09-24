@@ -28,6 +28,13 @@ try {
   assert.equal(data.tasks[0].title, '安装版离线验证')
   await page.getByRole('button', { name: '开始：安装版离线验证', exact: true }).click()
   await expect(page.locator('.task-timing')).toContainText('进行中')
+  await page.getByRole('button', { name: '暂停计时：安装版离线验证', exact: true }).click()
+  await expect(page.locator('.task-timing')).toContainText('已暂停')
+  const paused = JSON.parse(await readFile(join(directory, 'tasks.json'), 'utf8')).tasks[0]
+  assert.equal(paused.pauses.length, 1)
+  assert.equal(paused.pauses[0].endedAt, undefined)
+  await page.getByRole('button', { name: '继续计时：安装版离线验证', exact: true }).click()
+  await expect(page.locator('.task-timing')).toContainText('进行中')
   await page.getByRole('button', { name: /^时间回顾/ }).click()
   await expect(page.locator('.chart-row')).toContainText('安装版离线验证')
   await page.getByRole('button', { name: '查看记录：安装版离线验证', exact: true }).click()
@@ -36,6 +43,7 @@ try {
   const completed = JSON.parse(await readFile(join(directory, 'tasks.json'), 'utf8')).tasks[0]
   assert.ok(Number.isFinite(Date.parse(completed.startedAt)))
   assert.ok(Date.parse(completed.completedAt) >= Date.parse(completed.startedAt))
+  assert.ok(Date.parse(completed.pauses[0].endedAt) >= Date.parse(completed.pauses[0].startedAt))
   await page.getByRole('button', { name: /全部任务/ }).click()
   await page.getByRole('button', { name: '新建任务', exact: true }).click()
   await page.getByLabel('准备做点什么？').fill('安装版周期任务')
@@ -46,7 +54,7 @@ try {
   const recurring = JSON.parse(await readFile(join(directory, 'tasks.json'), 'utf8')).tasks.find(task => task.title === '安装版周期任务')
   assert.equal(recurring.recurrence.frequency, 'daily')
   await page.screenshot({ path: 'test-results/packaged-app.png' })
-  console.log(`Packaged EXE ${info.version} passed: bundled runtime, isolated profile, local assets, recommendations, task timing, recurring tasks, daily review and disk persistence.`)
+  console.log(`Packaged EXE ${info.version} passed: bundled runtime, isolated profile, local assets, recommendations, pause/resume timing, recurring tasks, daily review and disk persistence.`)
 } finally {
   await app.close()
   await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 })
