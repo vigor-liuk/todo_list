@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { applyCommand, dueTasks, markReminded, parseTasks, serializeTasks, validateTasks } from '../shared/tasks.mjs'
-import { occurrenceDate, projectTask, recurrenceLabel } from '../shared/recurrence.mjs'
+import { occurrenceDate, projectTask, recurrenceLabel, reviewOccurrences } from '../shared/recurrence.mjs'
 import { TaskStore } from '../electron/store.mjs'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -78,9 +78,56 @@ test('recurring task keeps pause history with its occurrence', () => {
 })
 
 test('invalid recurrence data fails import and old tasks remain compatible', () => {
-  for (const change of [{ start: '2026-02-30' }, { time: '25:00' }, { frequency: 'yearly' }, { minutes: 0 }, { records: { bad: {} } }, { records: { '2026-09-22': { done: 'yes', reminded: false } } }]) {
+  for (const change of [{ start: '2026-02-30' }, { end: '2026-09-21' }, { end: '2026-09-31' }, { time: '25:00' }, { frequency: 'yearly' }, { minutes: 0 }, { frequency: 'weekly', days: [7] }, { frequency: 'weekly', days: [] }, { frequency: 'monthly', days: [1, 1] }, { records: { bad: {} } }, { records: { '2026-09-22': { done: 'yes', reminded: false } } }]) {
     assert.throws(() => validateTasks([{ ...task(), recurrence: { ...task().recurrence, ...change } }]))
   }
   const { recurrence: _rule, ...single } = task()
   assert.deepEqual(parseTasks(serializeTasks([single])), [single])
+})
+
+test('selected days respect both bounds and skip nonexistent explicit monthly dates', () => {
+  const rule = { ...task().recurrence, frequency: 'weekly', days: [1, 5], end: '2026-09-28' }
+  assert.equal(occurrenceDate(rule, '2026-09-21'), '2026-09-25')
+  assert.equal(occurrenceDate(rule, '2026-09-26'), '2026-09-28')
+  assert.equal(occurrenceDate(rule, '2026-09-29'), undefined)
+  const monthly = { ...rule, frequency: 'monthly', start: '2024-01-28', end: '2024-04-15', days: [15, 31] }
+  assert.equal(occurrenceDate(monthly, '2024-01-01'), '2024-01-31')
+  assert.equal(occurrenceDate(monthly, '2024-02-16'), '2024-03-15')
+  assert.equal(occurrenceDate(monthly, '2024-03-16'), '2024-03-31')
+  assert.equal(occurrenceDate(monthly, '2024-04-16'), undefined)
+})
+
+test('end date stops reminders and new executions while recorded time survives restart', t => {
+  const dir = mkdtempSync(join(tmpdir(), 'little-day-ended-'))
+  t.after(() => rmSync(dir, { recursive: true, force: true }))
+  let store = new TaskStore(dir)
+  const recurring = task()
+  recurring.recurrence.end = '2026-09-23'
+  store.command({ type: 'upsert', task: recurring })
+  store.commit(applyCommand(store.tasks, { type: 'start', id: recurring.id }, time('2026-09-22T20:00')))
+  store.commit(applyCommand(store.tasks, { type: 'complete', id: recurring.id }, time('2026-09-22T20:30')))
+  assert.equal(store.tick(time('2026-09-23T20:00')).length, 1)
+  store = new TaskStore(dir)
+  assert.equal(store.tick(time('2026-09-24T20:00')).length, 0)
+  assert.equal(projectTask(store.tasks[0], '2026-09-24').due, '')
+  assert.equal(reviewOccurrences(store.tasks, '2026-09-22').find(record => record.done).completedAt, new Date('2026-09-22T20:30').toISOString())
+  assert.throws(() => applyCommand(store.tasks, { type: 'start', id: recurring.id, due: '2026-09-24T20:00' }))
+})
+
+test('conversion applies the explicit choice and preserves the selected occurrence if its due date changes', () => {
+  const recurring = task()
+  let tasks = applyCommand([recurring], { type: 'complete', id: recurring.id }, time('2026-09-22T20:30'))
+  tasks = applyCommand(tasks, { type: 'start', id: recurring.id }, time('2026-09-23T20:00'))
+  const current = { ...projectTask(tasks[0], '2026-09-23'), recurrence: undefined, due: '2026-09-24T21:00' }
+  assert.throws(() => applyCommand(tasks, { type: 'upsert', task: current }))
+  for (const keepHistory of [true, false]) {
+    const converted = applyCommand(tasks, { type: 'upsert', task: current, stopRecurrence: { keepHistory, occurrenceDay: '2026-09-23' } }, time('2026-09-23T21:00'))
+    const restored = parseTasks(serializeTasks(converted))
+    assert.equal(restored.length, 1)
+    assert.equal(restored[0].recurrence, undefined)
+    assert.equal(restored[0].startedAt, current.startedAt)
+    assert.equal(restored[0].due, current.due)
+    assert.deepEqual(Object.keys(restored[0].recurrenceHistory?.[0].records ?? {}), keepHistory ? ['2026-09-22'] : [])
+    assert.equal(reviewOccurrences(restored, '2026-09-22').some(record => record.done && record.historyKey === 0), keepHistory)
+  }
 })

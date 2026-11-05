@@ -48,11 +48,16 @@ try {
   await page.getByRole('button', { name: '新建任务', exact: true }).click()
   await page.getByLabel('准备做点什么？').fill('安装版周期任务')
   await page.getByLabel('重复周期').selectOption('daily')
+  const end = new Date()
+  end.setDate(end.getDate() + 7)
+  const endDay = `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, '0')}-${String(end.getDate()).padStart(2, '0')}`
+  await page.getByLabel('结束日期（选填）').fill(endDay)
   await page.getByLabel('每次提醒时间').fill('20:00')
   await page.getByRole('button', { name: '添加任务', exact: true }).click()
   await expect(page.locator('.task-row').filter({ hasText: '安装版周期任务' })).toContainText('每天 20:00')
   const recurring = JSON.parse(await readFile(join(directory, 'tasks.json'), 'utf8')).tasks.find(task => task.title === '安装版周期任务')
   assert.equal(recurring.recurrence.frequency, 'daily')
+  assert.equal(recurring.recurrence.end, endDay)
   await page.screenshot({ path: 'test-results/packaged-app.png' })
   console.log(`Packaged EXE ${info.version} passed: bundled runtime, isolated profile, local assets, recommendations, pause/resume timing, recurring tasks, daily review and disk persistence.`)
 } finally {

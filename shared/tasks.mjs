@@ -1,8 +1,23 @@
 import { localDate, validateRecord } from './recommendation-record.mjs'
-import { projectTask, projectOccurrence, occurrenceState } from './recurrence.mjs'
+import { projectTask, projectOccurrence, occurrenceState, occurrenceDate, hasOccurrenceRecord } from './recurrence.mjs'
 export const storageKey = 'little-day-tasks-v1'
 export const maxBytes = 10 * 1024 * 1024
 export const categories = ['课内', '课外', '生活', '个人']
+const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 && Number.isFinite(Date.parse(`${value}T12:00:00`)) && localDate(new Date(`${value}T12:00:00`)).padStart(10, '0') === value
+
+function validateOccurrenceHistory(history, task) {
+  if (!history || typeof history.time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(history.time) ||
+    !history.records || typeof history.records !== 'object' || Array.isArray(history.records) || Object.keys(history.records).length > 20000) {
+    throw Error('周期任务的提醒时间或记录无效。')
+  }
+  const records = {}
+  for (const [day, state] of Object.entries(history.records)) {
+    if (!validDate(day) || !state || typeof state !== 'object') throw Error('周期任务记录无效。')
+    const record = validateTasks([{ ...task, recurrence: undefined, recurrenceHistory: undefined, recommendation: undefined, done: state.done, reminded: state.reminded, startedAt: state.startedAt, completedAt: state.completedAt, pauses: state.pauses, due: `${day}T12:00` }])[0]
+    records[day] = occurrenceState(record)
+  }
+  return { time: history.time, records }
+}
 
 export function validateTasks(value) {
   const tasks = Array.isArray(value) ? value : value?.version === 1 ? value.tasks : null
@@ -48,19 +63,29 @@ export function validateTasks(value) {
     let recurrence
     if (t.recurrence !== undefined) {
       const r = t.recurrence
-      const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) > 0 && Number.isFinite(Date.parse(`${value}T12:00:00`)) && localDate(new Date(`${value}T12:00:00`)) === value
-      if (!r || !['daily', 'weekly', 'monthly'].includes(r.frequency) || !validDate(r.start) || typeof r.time !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(r.time) ||
-        (r.minutes !== undefined && (!Number.isInteger(r.minutes) || r.minutes < 1 || r.minutes > 1440)) || !r.records || typeof r.records !== 'object' || Array.isArray(r.records) || Object.keys(r.records).length > 20000 || !t.due) throw Error('周期任务的日期、时间或目标时长无效。')
-      const records = {}
-      for (const [day, state] of Object.entries(r.records)) {
-        if (!validDate(day) || !state || typeof state !== 'object') throw Error('周期任务记录无效。')
-        const record = validateTasks([{ ...t, recurrence: undefined, recommendation: undefined, done: state.done, reminded: state.reminded, startedAt: state.startedAt, completedAt: state.completedAt, pauses: state.pauses, due: `${day}T12:00` }])[0]
-        records[day] = occurrenceState(record)
+      if (!r || !['daily', 'weekly', 'monthly'].includes(r.frequency) || !validDate(r.start) ||
+        (r.end !== undefined && (!validDate(r.end) || r.end < r.start)) ||
+        (r.minutes !== undefined && (!Number.isInteger(r.minutes) || r.minutes < 1 || r.minutes > 1440))) throw Error('周期任务的日期或目标时长无效。')
+      if (r.days !== undefined) {
+        const min = r.frequency === 'weekly' ? 0 : 1
+        const max = r.frequency === 'weekly' ? 6 : 31
+        if (r.frequency === 'daily' || !Array.isArray(r.days) || !r.days.length || new Set(r.days).size !== r.days.length ||
+          r.days.some(day => !Number.isInteger(day) || day < min || day > max)) throw Error('请选择有效的重复日期。')
       }
-      recurrence = { frequency: r.frequency, start: r.start, time: r.time, ...(r.minutes === undefined ? {} : { minutes: r.minutes }), records }
+      recurrence = { ...validateOccurrenceHistory(r, t), frequency: r.frequency, start: r.start,
+        ...(r.end === undefined ? {} : { end: r.end }), ...(r.days === undefined ? {} : { days: [...r.days].sort((a, b) => a - b) }),
+        ...(r.minutes === undefined ? {} : { minutes: r.minutes }) }
+    }
+    let recurrenceHistory
+    if (t.recurrenceHistory !== undefined) {
+      if (!Array.isArray(t.recurrenceHistory)) throw Error('已保留的周期任务记录无效。')
+      recurrenceHistory = t.recurrenceHistory.map(history => {
+        if (!Number.isFinite(history?.archivedAt) || !Number.isFinite(new Date(history.archivedAt).getTime())) throw Error('已保留的周期任务记录无效。')
+        return { ...validateOccurrenceHistory(history, t), archivedAt: history.archivedAt }
+      })
     }
     ids.add(t.id)
-    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded, ...timing, ...(recurrence ? { recurrence } : {}), ...(t.recommendation === undefined ? {} : { recommendation: validateRecord(t.recommendation) }) }
+    return { id: t.id, title: t.title.trim(), note: t.note, category: t.category === '工作' ? '课外' : t.category === '学习' ? '课内' : t.category, priority: t.priority, due: t.due, done: t.done, reminded: t.reminded, ...timing, ...(recurrence ? { recurrence } : {}), ...(recurrenceHistory?.length ? { recurrenceHistory } : {}), ...(t.recommendation === undefined ? {} : { recommendation: validateRecord(t.recommendation) }) }
   })
 }
 
@@ -79,11 +104,26 @@ export function serializeTasks(tasks) {
 }
 
 export function applyCommand(tasks, command, now = Date.now()) {
-  const projected = tasks.map(t => t.recurrence && t.id === command?.id ? command.due ? projectOccurrence(t, command.due.slice(0, 10)) : projectTask(t, localDate(new Date(now))) : t)
+  const projected = tasks.map(t => {
+    if (!t.recurrence || t.id !== command?.id) return t
+    const day = command.due?.slice(0, 10)
+    const occurrence = day ? projectOccurrence(t, day) : projectTask(t, localDate(new Date(now)).padStart(10, '0'))
+    const date = occurrence.due.slice(0, 10)
+    if (command.type !== 'delete' && (!validDate(date) ||
+      !hasOccurrenceRecord(t.recurrence.records[date]) && occurrenceDate(t.recurrence, date) !== date)) throw Error('这一天没有安排该周期任务。')
+    return occurrence
+  })
   const next = executeCommand(projected, command, now)
   if (command.type === 'import' || command.type === 'delete') return next
   const id = command.type === 'upsert' ? command.task.id : command.id
-  return validateTasks(next.map(t => t.id === id && t.recurrence ? { ...t, recurrence: { ...t.recurrence, records: { ...t.recurrence.records, [t.due.slice(0, 10)]: occurrenceState(t) } } } : t))
+  return validateTasks(next.map(t => {
+    if (t.id !== id || !t.recurrence || !t.due) return t
+    const date = t.due.slice(0, 10)
+    const records = { ...t.recurrence.records }
+    if (hasOccurrenceRecord(t)) records[date] = occurrenceState(t)
+    else delete records[date]
+    return { ...t, recurrence: { ...t.recurrence, records } }
+  }))
 }
 
 function executeCommand(tasks, command, now) {
@@ -96,8 +136,20 @@ function executeCommand(tasks, command, now) {
   if (command.type === 'upsert') {
     const task = validateTasks([command.task])[0]
     const stored = tasks.find(t => t.id === task.id)
-    const previous = stored?.recurrence ? projectOccurrence(stored, task.due.slice(0, 10)) : stored
+    const stopping = stored?.recurrence && !task.recurrence
+    const choice = command.stopRecurrence
+    if (stopping && (typeof choice?.keepHistory !== 'boolean' ||
+      choice.occurrenceDay !== '' && !validDate(choice.occurrenceDay))) throw Error('请选择是否保留周期任务记录。')
+    const date = stopping ? choice.occurrenceDay : task.due.slice(0, 10)
+    const previous = stored?.recurrence ? projectOccurrence(stored, date) : stored
+    if (stored) task.recurrenceHistory = stored.recurrenceHistory
     if (task.recurrence && stored?.recurrence) task.recurrence.records = stored.recurrence.records
+    if (stopping && choice.keepHistory) {
+      const { records: oldRecords, time } = stored.recurrence
+      const records = Object.fromEntries(Object.entries(oldRecords)
+        .filter(([day, state]) => day !== date && hasOccurrenceRecord(state)))
+      if (Object.keys(records).length) task.recurrenceHistory = [...(task.recurrenceHistory || []), { time, records, archivedAt: now }]
+    }
     if (previous?.recommendation) {
       const old = previous.recommendation
       const r = task.recommendation || old
@@ -131,7 +183,9 @@ function executeCommand(tasks, command, now) {
 }
 
 export function dueTasks(tasks, now = Date.now()) {
-  return tasks.map(t => projectTask(t, localDate(new Date(now)))).filter(t => !t.done && !t.reminded && t.due && new Date(t.due).getTime() <= now)
+  const day = localDate(new Date(now)).padStart(10, '0')
+  return tasks.map(t => projectTask(t, day)).filter(t => !t.done && !t.reminded && t.due &&
+    (!t.recurrence || t.due.startsWith(day) && occurrenceDate(t.recurrence, day) === day) && new Date(t.due).getTime() <= now)
 }
 
 export function markReminded(tasks, due) {

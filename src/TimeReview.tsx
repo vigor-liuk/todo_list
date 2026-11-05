@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import type { Task } from './taskRepository'
+import type { ReviewTask } from '../shared/recurrence.mjs'
 import { dateKey } from './taskRepository'
 import { dayRecords, durationLabel, timingLabel, workIntervals } from './taskTime'
 
-type Props = { tasks: Task[]; day: string; today: string; now: number; onDay: (day: string) => void; onEdit: (task: Task) => void; onComplete: (task: Task) => void }
-const recordKey = (task: Task) => `${task.id}:${task.due}`
+type Props = { tasks: ReviewTask[]; day: string; today: string; now: number; onDay: (day: string) => void; onEdit: (task: Task) => void; onComplete: (task: Task) => void }
+const recordKey = (task: ReviewTask) => JSON.stringify([task.id, task.due, task.historyKey])
 const hours = Array.from({ length: 25 }, (_, hour) => hour)
 const hourLabel = (hour: number) => `${String(hour).padStart(2, '0')}:00`
 
@@ -33,7 +34,7 @@ export function TimeReview({ tasks, day, today, now, onDay, onEdit, onComplete }
     date.setDate(date.getDate() + offset)
     onDay(dateKey(date))
   }
-  const status = (task: Task) => task.done ? '已完成' : task.pauses?.length && !task.pauses.at(-1)?.endedAt ? '已暂停' : task.startedAt ? '进行中' : '未开始'
+  const status = (task: ReviewTask) => task.done ? '已完成' : task.pauses?.length && !task.pauses.at(-1)?.endedAt ? '已暂停' : task.startedAt ? task.historyKey === undefined ? '进行中' : '归档时未完成' : '未开始'
   return <section className="time-review" aria-label="每日时间回顾">
     <div className="review-heading"><div><h2>这一天，时间花在哪里</h2><p>从零点到午夜，看清每件事的安排与实际用时。</p></div>
       <div className="review-date"><button title="回顾前一天" aria-label="回顾前一天" onClick={() => shift(-1)}>‹</button><input type="date" aria-label="回顾日期" value={day} onChange={event => { if (event.target.value) onDay(event.target.value) }}/><button title="回顾后一天" aria-label="回顾后一天" onClick={() => shift(1)}>›</button><button onClick={() => onDay(today)}>今天</button></div>
@@ -69,7 +70,7 @@ export function TimeReview({ tasks, day, today, now, onDay, onEdit, onComplete }
       <p className="timeline-time">{timingLabel(selected.task, now, day) || '尚未记录执行时间'}</p>
       {selected.task.note && <p>{selected.task.note}</p>}
       <div className="timeline-meta"><span>{selected.task.category}</span><span>原计划：{selected.task.due ? selected.task.due.replace('T', ' ') : '未设置提醒时间'}</span>{selected.task.startedAt && <span>当天用时：{durationLabel(selected.duration)}</span>}</div>
-      <div className="timeline-actions"><button onClick={() => onEdit(selected.task)}>修改记录</button>{!selected.task.done && selected.task.startedAt && <button onClick={() => onComplete(selected.task)}>结束并完成</button>}</div>
+      {selected.task.historyKey === undefined ? <div className="timeline-actions"><button onClick={() => onEdit(selected.task)}>修改记录</button>{!selected.task.done && selected.task.startedAt && <button onClick={() => onComplete(selected.task)}>结束并完成</button>}</div> : <p>已归档的周期记录</p>}
     </section>}
     {!records.length && <div className="empty-state"><h3>这一天还没有时间记录</h3><p>{planned.length ? '已在图中标出原定提醒。' : ''}在任务上点击“开始”，完成后就能在这里回顾。<br/>忘记记录时，也可以编辑任务补填实际时间。</p></div>}
     <p className="review-hint review-footnote">跨天任务仅绘制并累计当天用时，同时进行的任务分别累计。原定提醒是时间点，不代表计划时长；未记录起止时间的旧任务不推算用时。</p>
